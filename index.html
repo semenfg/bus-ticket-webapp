@@ -2,114 +2,93 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <title>Электронный билет</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <title>Билет</title>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
   <style>
-    body {
-      margin: 0;
-      font-family: Arial, sans-serif;
-      background-color: #111;
-      color: #fff;
-    }
-    .ticket {
-      max-width: 400px;
-      margin: 20px auto;
-      padding: 20px;
-      background: #1c1c1c;
-      border-radius: 16px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-    }
-    .ticket h2 {
-      text-align: center;
-      margin: 0 0 15px;
-      font-size: 20px;
-      color: #e53935;
-    }
-    .timer {
-      text-align: center;
-      font-size: 18px;
-      font-weight: bold;
-      margin-bottom: 15px;
-      color: #f44336;
-    }
-    .ticket p {
-      margin: 6px 0;
-      font-size: 16px;
-    }
-    .label {
-      color: #aaa;
-      font-size: 14px;
-    }
-    .close-btn {
-      display: block;
-      width: 100%;
-      margin-top: 20px;
-      padding: 12px;
-      background: #e53935;
-      color: #fff;
-      border: none;
-      border-radius: 12px;
-      font-size: 16px;
-      cursor: pointer;
-    }
-    .close-btn:hover {
-      background: #c62828;
-    }
-    .expired {
-      text-align: center;
-      font-size: 18px;
-      color: #ff5252;
-      font-weight: bold;
-      margin-top: 15px;
-    }
+    body { font-family: Arial, sans-serif; background:#111; color:#fff; margin:20px; }
+    .card { padding:15px; border:1px solid #333; border-radius:12px; background:#1e1e1e; margin-bottom:20px; }
+    label { display:block; margin-top:10px; }
+    input, select { width:100%; padding:8px; margin-top:5px; border-radius:6px; border:1px solid #444; background:#222; color:#fff; }
+    button { margin-top:15px; padding:10px 16px; border:none; border-radius:8px; background:#e53935; color:#fff; cursor:pointer; }
+    button:disabled { background:#555; }
+    #qrcode { margin-top:20px; text-align:center; }
+    #timer { margin-top:10px; font-weight:bold; text-align:center; }
   </style>
 </head>
 <body>
-  <div class="ticket">
-    <h2>Городской Транспорт</h2>
-    <div class="timer" id="timer">Действует: 15 сек.</div>
+  <h2>Покупка билета</h2>
+  <div class="card">
+    <label>Перевозчик</label>
+    <input id="carrier" value="ИП Тагачаков В. Г.">
 
-    <p><span class="label">Перевозчик:</span> <span id="carrier">—</span></p>
-    <p><span class="label">ТС:</span> <span id="vehicle">—</span></p>
-    <p><span class="label">Стоимость:</span> <span id="price">—</span></p>
-    <p><span class="label">Дата:</span> <span id="date">—</span></p>
-    <p><span class="label">Время:</span> <span id="time">—</span></p>
-    <p><span class="label">ID билета:</span> <span id="ticketId">—</span></p>
+    <label>Номер автобуса</label>
+    <input id="bus_number" value="у431са124">
 
-    <div id="expired" class="expired" style="display:none;">❌ Время действия истекло</div>
+    <label>Стоимость</label>
+    <input id="price" value="35.00 ₽">
 
-    <button class="close-btn" onclick="Telegram.WebApp.close()">Закрыть</button>
+    <label>Дата</label>
+    <input type="date" id="date">
+
+    <label>Время</label>
+    <input type="time" id="time">
+
+    <button onclick="generateQR()">Сформировать QR</button>
+  </div>
+
+  <div class="card">
+    <h3>Контроль</h3>
+    <div id="qrcode"></div>
+    <button id="activateBtn" onclick="activate()" disabled>Активировать</button>
+    <div id="timer"></div>
   </div>
 
   <script>
-    const tg = window.Telegram.WebApp;
-    tg.expand();
-
-    // Получаем данные из URL
-    const urlParams = new URLSearchParams(window.location.search);
-    document.getElementById("carrier").innerText = urlParams.get("carrier") || "—";
-    document.getElementById("vehicle").innerText = urlParams.get("vehicle") || "—";
-    document.getElementById("price").innerText = (urlParams.get("price") || "—") + " ₽";
-    document.getElementById("date").innerText = urlParams.get("date") || "—";
-    document.getElementById("time").innerText = urlParams.get("time") || "—";
-    document.getElementById("ticketId").innerText = urlParams.get("ticketId") || "—";
-
-    // Таймер на 15 секунд
+    let ticketData = {};
+    let countdown;
     let timeLeft = 15;
-    const timerEl = document.getElementById("timer");
-    const expiredEl = document.getElementById("expired");
 
-    const interval = setInterval(() => {
-      timeLeft--;
-      if (timeLeft > 0) {
-        timerEl.textContent = `Действует: ${timeLeft} сек.`;
-      } else {
-        clearInterval(interval);
-        timerEl.style.display = "none";
-        expiredEl.style.display = "block";
-      }
-    }, 1000);
+    function generateQR() {
+      const carrier = document.getElementById("carrier").value;
+      const bus = document.getElementById("bus_number").value;
+      const price = document.getElementById("price").value;
+      const date = document.getElementById("date").value;
+      const time = document.getElementById("time").value;
+
+      ticketData = {
+        carrier,
+        bus,
+        price,
+        date,
+        time,
+        ticketId: Date.now().toString(36)
+      };
+
+      document.getElementById("qrcode").innerHTML = "";
+      QRCode.toCanvas(document.createElement("canvas"), JSON.stringify(ticketData), function (err, canvas) {
+        if (err) console.error(err);
+        document.getElementById("qrcode").appendChild(canvas);
+      });
+
+      document.getElementById("activateBtn").disabled = false;
+      document.getElementById("timer").innerText = "";
+    }
+
+    function activate() {
+      clearInterval(countdown);
+      timeLeft = 15;
+      document.getElementById("timer").innerText = "Действует: " + timeLeft + " сек.";
+
+      countdown = setInterval(() => {
+        timeLeft--;
+        if (timeLeft > 0) {
+          document.getElementById("timer").innerText = "Действует: " + timeLeft + " сек.";
+        } else {
+          document.getElementById("timer").innerText = "Время истекло ❌";
+          clearInterval(countdown);
+        }
+      }, 1000);
+    }
   </script>
 </body>
 </html>
